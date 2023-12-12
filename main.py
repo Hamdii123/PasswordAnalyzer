@@ -1,8 +1,10 @@
 import re
 import random
 import tkinter as tk
+import math
+import string
 
-def password_strength(password, min_length, max_length):
+def check_password(password, min_length, max_length):
     length_error = len(password) < min_length or len(password) > max_length
     digit_error = not re.search(r"\d", password)
     lowercase_error = not re.search(r"[a-z]", password)
@@ -10,7 +12,7 @@ def password_strength(password, min_length, max_length):
     special_char_error = not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password)
 
     score = 100 - (length_error + digit_error + lowercase_error + uppercase_error + special_char_error) * 20
-    key_bit = len(password)
+    key_bit = len(password) * 8
     password_ok = not (length_error or digit_error or lowercase_error or uppercase_error or special_char_error)
 
     return {
@@ -24,32 +26,43 @@ def password_strength(password, min_length, max_length):
         'key_bit': key_bit
     }
 
-def generate_strong_password():
-    suggestions = [
-        "StrongPassword123!",
-        "SecurePassw0rd!",
-        "P@ssw0rd123",
-        "MyStrongP@ss!",
-        "SafePassword2022"
-    ]
-    return random.choice(suggestions)
+def generate_strong_password(min_length, max_length):
+    all_characters = string.ascii_letters + string.digits + string.punctuation
+    password_length = random.randint(min_length, max_length)
+    suggested_password = ''.join(random.choice(all_characters) for _ in range(password_length))
+    return suggested_password
 
-def estimate_time_to_break(key_bit):
-    attempts_per_second = 10**6  # Adjust this based on your assumptions
-    seconds_per_minute = 60
-    seconds_per_hour = 60 * seconds_per_minute
-    seconds_per_day = 24 * seconds_per_hour
+def calculate_entropy(password):
+    possible_characters = 0
+    for char_set in [string.ascii_lowercase, string.ascii_uppercase, string.digits, string.punctuation]:
+        possible_characters += len(set(password) & set(char_set))
+    entropy = math.log2(possible_characters) * len(password)
+    return entropy
 
-    time_to_break_seconds = 2**(key_bit - 1) / attempts_per_second
-    time_to_break_days = time_to_break_seconds / seconds_per_day
+def calculate_break_time(entropy):
+    seconds_to_break = 2 ** entropy
+    minutes_to_break = seconds_to_break / 60
+    hours_to_break = minutes_to_break / 60
+    days_to_break = hours_to_break / 24
+    years_to_break = days_to_break / 365
 
-    return time_to_break_days
+    remaining_seconds = seconds_to_break % 60
+    remaining_minutes = minutes_to_break % 60
+    remaining_hours = hours_to_break % 24
+
+    return (
+        f"{int(years_to_break)} years, "
+        f"{int(days_to_break % 365)} days, "
+        f"{int(remaining_hours)} hours, "
+        f"{int(remaining_minutes)} minutes, "
+        f"{int(remaining_seconds)} seconds"
+    )
 
 def analyze_password():
     user_password = password_entry.get()
     min_length_val = int(min_length_entry.get())
     max_length_val = int(max_length_entry.get())
-    result = password_strength(user_password, min_length_val, max_length_val)
+    result = check_password(user_password, min_length_val, max_length_val)
 
     summary_message = "Analysis Summary:\n"
 
@@ -81,8 +94,9 @@ def analyze_password():
         else:
             summary_message += "- Should contain at least one special character. (✔️)\n"
 
-        suggested_password = generate_strong_password()
-        summary_message += f"\nSuggested strong password: {suggested_password}\n"
+        entropy = calculate_entropy(user_password)
+        time_to_break = calculate_break_time(entropy)
+        summary_message += f"Estimated time to break this password: {time_to_break}"
 
     summary_message += f"\nFinal password score: {result['score']}% - Equivalent key bit: {result['key_bit']} bits"
 
@@ -99,9 +113,6 @@ def analyze_password():
         result_color = "green"
         result_text = "Good"
 
-    time_to_break_days = estimate_time_to_break(result['key_bit'])
-    summary_message += f"\nEstimated time to break this password: {time_to_break_days:.2f} days"
-
     result_label.config(text=summary_message, fg=result_color)
     result_display.config(text=result_text, fg="white", font=("Helvetica", 16), bg=result_color)
 
@@ -113,8 +124,10 @@ def clear_password():
     min_length_entry.delete(0, tk.END)
     max_length_entry.delete(0, tk.END)
     enable_length_var.set(True)
-    result_label.config(text="", fg="black")
+    result_label.config(text="")
     result_display.config(text="")
+    suggested_password_label.config(text="")
+    
 
 def toggle_length_inputs():
     min_length_entry.config(state=tk.NORMAL if enable_length_var.get() else tk.DISABLED)
@@ -124,8 +137,14 @@ def center_window(window, width, height):
     screen_width = window.winfo_screenwidth()
     screen_height = window.winfo_screenheight()
     x_coordinate = (screen_width - width) // 2
-    y_coordinate = (screen_height - height) // 2
+    y_coordinate = (screen_height - height) // 2   
     window.geometry(f"{width}x{height}+{x_coordinate}+{y_coordinate}")
+
+def generate_and_display_password():
+    min_length_val = int(min_length_entry.get())
+    max_length_val = int(max_length_entry.get())
+    suggested_password = generate_strong_password(min_length_val, max_length_val)
+    suggested_password_label.config(text=f"Suggested Password: {suggested_password}")
 
 def center_content():
     for widget in [enable_length_check, min_length_label, min_length_entry,
@@ -134,7 +153,6 @@ def center_content():
                    result_display]:
         widget.pack(pady=5)
 
-    created_by_label.pack(side=tk.BOTTOM, anchor=tk.SW)
     exit_button = tk.Button(root, text="Exit", command=exit_application)
     exit_button.pack(side=tk.BOTTOM, pady=10)
 
@@ -143,7 +161,7 @@ root.title("Password Strength Analyzer - Hamdi Barkallah")
 root.geometry("750x500")
 
 enable_length_var = tk.BooleanVar(value=True)
-enable_length_check = tk.Checkbutton(root, text="Enable length editing", variable=enable_length_var, command=toggle_length_inputs)
+enable_length_check = tk.Checkbutton(root, text="Enable length editing", variable=enable_length_var)
 enable_length_check.pack(pady=5)
 
 min_length_label = tk.Label(root, text="Min Length:")
@@ -185,8 +203,11 @@ result_display_frame.pack(pady=10)
 result_display = tk.Label(result_display_frame, text="", font=("Helvetica", 16), justify=tk.CENTER)
 result_display.pack(fill=tk.BOTH, expand=True)
 
-created_by_label =tk.Label(root, text="Created By Hamdi Barkallah", font=("Helvetica", 10), fg="gray")
+generate_password_button = tk.Button(root, text="Generate Suggested Password", command=generate_and_display_password)
+generate_password_button.pack(side=tk.BOTTOM, pady=10)
+suggested_password_label = tk.Label(root, text="", font=("Helvetica", 12), fg="black")
+suggested_password_label.pack(side=tk.BOTTOM, pady=5)
 
 center_content()
+center_window(root, 750, 500)
 root.mainloop()
-
